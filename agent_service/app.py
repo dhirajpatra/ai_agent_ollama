@@ -8,11 +8,22 @@ from langchain.prompts import PromptTemplate
 from langchain.schema import HumanMessage
 from langchain_community.llms import Ollama
 
+from fastapi.middleware.cors import CORSMiddleware
+
+
 # Load environment variables
 load_dotenv()
 
 # Initialize FastAPI
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize the Ollama Llama 3 model
 llm = Ollama(
@@ -33,37 +44,68 @@ class OutputData(BaseModel):
 # Define state structure
 class State(Dict):
     text: str
-    classification: str
-    entities: List[str]
-    summary: str
+    classification: str = ""
+    entities: List[str] = []
+    summary: str = ""
 
 # Function to classify text
 def classification_node(state: State):
-    """Classify the text into predefined categories."""
+    """Classify text into categories."""
+    # Define the classification prompt
+    classification_prompt = """Classify the following text into one of these categories: 
+    - News
+    - Blog
+    - Research
+    - Other
+
+    Text: "{text}"
+
+    Respond with only the category name."""
+
+
     prompt = PromptTemplate(
         input_variables=["text"],
-        template="Classify the following text into one of the categories: News, Blog, Research, or Other.\n\nText: {text}\n\nCategory:"
+        # template="Classify the following text into one of the categories: News, Blog, Research, or Other.\n\nText: {text}\n\nCategory:"
+        template=classification_prompt
     )
     message = HumanMessage(content=prompt.format(text=state["text"]))
-    classification = llm.invoke([message]).strip()
+    classification = llm.invoke(message.content).strip()
     return {"classification": classification}
 
 # Function to extract named entities
 def entity_extraction_node(state: State):
     """Extract named entities from text."""
+    # Define the entity extraction prompt
+    entity_extraction_prompt = entity_extraction_prompt = """Extract key entities (people, organizations, locations) from the text:
+
+    Text: "{text}"
+
+    Respond with a JSON list of entities only."""
+
+
     prompt = PromptTemplate(
         input_variables=["text"],
-        template="Extract all entities (Person, Organization, Location) from the following text. Provide them as a comma-separated list.\n\nText: {text}\n\nEntities:"
+        # template="Extract all entities (Person, Organization, Location) from the following text. Provide them as a comma-separated list.\n\nText: {text}\n\nEntities:"
+        template=entity_extraction_prompt
     )
     message = HumanMessage(content=prompt.format(text=state["text"]))
-    entities = llm.invoke([message]).strip().split(", ")
+    entities = llm.invoke(message.content).strip().split(", ")
     return {"entities": entities}
 
 # Function to summarize text
 def summarize_node(state: State):
     """Summarize text in one sentence."""
+    # Define the summarization prompt
+    summary_prompt = summary_prompt = """Summarize the following text in one concise sentence:
+
+    Text: "{text}"
+
+    Respond with only the summary sentence."""
+
+    # template = "Summarize the following text in one sentence.\n\nText: {text}\n\nSummary:"
+    template = summary_prompt
     prompt = PromptTemplate.from_template(
-        "Summarize the following text in one sentence.\n\nText: {text}\n\nSummary:"
+        template=template,
     )
     chain = prompt | llm
     response = chain.invoke({"text": state["text"]})
